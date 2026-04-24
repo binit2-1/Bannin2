@@ -1,0 +1,52 @@
+version: 1
+skill: rule-writing-guidelines
+
+global:
+  objective: "Maximize detection signal while minimizing operational alert noise."
+  authoring_requirements:
+    - "Use project-summary as primary context for expected benign behavior."
+    - "Write deterministic rules with explicit context constraints."
+    - "Comment why each major rule or exception exists."
+  safety_checks:
+    - "Validate syntax before restart/reload."
+    - "Do not overwrite vendor-managed default rule files."
+    - "Write custom rules into local/custom include locations only."
+
+tools:
+  falco:
+    output_file: "/etc/falco/rules.d/bannin-rules.yaml"
+    local_override_file: "/etc/falco/falco_rules.local.yaml"
+    config_file: "/etc/falco/falco.yaml"
+    validate_command: "falco --validate /etc/falco/falco.yaml"
+    apply_command: "systemctl restart falco"
+    notes:
+      - "Prefer macros/lists/exceptions to keep rules readable and tunable."
+      - "Use exceptions for known-benign process/file combinations."
+
+  suricata:
+    output_file: "/etc/suricata/rules/bannin.rules"
+    local_rules_file: "/etc/suricata/rules/local.rules"
+    config_file: "/etc/suricata/suricata.yaml"
+    validate_command: "suricata -T -c /etc/suricata/suricata.yaml"
+    apply_command: "suricatasc -c reload-rules"
+    notes:
+      - "Use thresholding/suppression for repetitive benign traffic patterns."
+      - "Keep SIDs/revisions stable to preserve alert history quality."
+
+  wazuh:
+    output_file: "/var/ossec/etc/rules/local_rules.xml"
+    local_decoder_file: "/var/ossec/etc/decoders/local_decoder.xml"
+    validate_command: "/var/ossec/bin/wazuh-logtest"
+    apply_command: "systemctl restart wazuh-manager"
+    notes:
+      - "Use local custom files to avoid upgrade overwrite."
+      - "Correlate with if_sid/if_group before adding new broad rules."
+
+  zeek:
+    output_file: "/usr/local/zeek/share/zeek/site/bannin.zeek"
+    site_entrypoint: "/usr/local/zeek/share/zeek/site/local.zeek"
+    validate_command: "zeek -N && zeek -b -s local"
+    apply_command: "zeekctl deploy"
+    notes:
+      - "Prefer script-based logic and Notice framework for context-rich detections."
+      - "Use notice suppression windows for known recurring benign events."
