@@ -152,6 +152,13 @@ func (h *Handler) HandleToolsWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if shouldValidateFalcoPath(path) {
+		if _, err := h.validateFalcoRuleContents(req.Contents); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
 	if err := os.WriteFile(path, []byte(req.Contents), 0644); err != nil {
 		http.Error(w, fmt.Sprintf("error writing file: %v", err), http.StatusInternalServerError)
 		return
@@ -162,14 +169,9 @@ func (h *Handler) HandleToolsWrite(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) HandleToolsValidate(w http.ResponseWriter, r *http.Request) {
-	output, err := h.commandRunner().CombinedOutput("sudo", "falco", "-c", "/etc/falco/falco.yaml", "--dry-run")
-	result := strings.TrimSpace(string(output))
-	if result == "" {
-		result = "validation completed with no output"
-	}
-
+	result, err := h.validateFalcoBaseConfig()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Falco validation failed: %v\n%s", err, result), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -209,6 +211,13 @@ func (h *Handler) HandleToolsEdit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	updated := strings.Replace(content, req.OldContents, req.NewContents, 1)
+	if shouldValidateFalcoPath(path) {
+		if _, err := h.validateFalcoRuleContents(updated); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
 	if err := os.WriteFile(path, []byte(updated), 0644); err != nil {
 		http.Error(w, fmt.Sprintf("error saving edited file: %v", err), http.StatusInternalServerError)
 		return
@@ -223,6 +232,13 @@ func (h *Handler) HandleToolsRestart(w http.ResponseWriter, r *http.Request) {
 	if toolname == "" {
 		http.Error(w, "missing 'toolname' query parameter", http.StatusBadRequest)
 		return
+	}
+
+	if strings.EqualFold(toolname, "falco") {
+		if _, err := h.validateFalcoBaseConfig(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 
 	if err := h.commandRunner().Run("systemctl", "restart", toolname); err != nil {
@@ -295,4 +311,58 @@ func resolveRequestPath(r *http.Request, fallback string) (string, error) {
 		rawPath = fallback
 	}
 	return resolvePath(rawPath)
+}
+
+func shouldValidateFalcoPath(path string) bool {
+	cleanPath := filepath.ToSlash(strings.ToLower(path))
+	return strings.Contains(cleanPath, "/falco/")
+}
+
+func (h *Handler) validateFalcoBaseConfig() (string, error) {
+	output, err := h.commandRunner().CombinedOutput("sudo", "falco", "-c", "/etc/falco/falco.yaml", "--dry-run")
+	result := strings.TrimSpace(string(output))
+	if result == "" {
+		result = "validation completed with no output"
+	}
+
+	if err != nil {
+		return result, fmt.Errorf("Validation failed:\n%s", result)
+	}
+
+	return result, nil
+}
+
+func (h *Handler) validateFalcoRuleContents(contents string) (string, error) {
+	tmpFile, err := os.CreateTemp("", "falco-validate-*.yaml")
+	if err != nil {
+		return "", fmt.Errorf("failed to create validation temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
+
+	if _, err := tmpFile.WriteString(contents); err != nil {
+		_ = tmpFile.Close()
+		return "", fmt.Errorf("failed to write validation temp file: %w", err)
+	}
+
+	if err := tmpFile.Close(); err != nil {
+		return "", fmt.Errorf("failed to close validation temp file: %w", err)
+	}
+
+	output, err := h.commandRunner().CombinedOutput(
+		"sudo", "falco",
+		"-c", "/etc/falco/falco.yaml",
+		"-r", tmpPath,
+		"--dry-run",
+	)
+	result := strings.TrimSpace(string(output))
+	if result == "" {
+		result = "validation completed with no output"
+	}
+
+	if err != nil {
+		return result, fmt.Errorf("Validation failed:\n%s", result)
+	}
+
+	return result, nil
 }

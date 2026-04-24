@@ -13,15 +13,20 @@ import (
 )
 
 type fakeCommander struct {
-	output []byte
-	runErr error
+	output       []byte
+	combinedErr  error
+	runErr       error
+	combinedArgs [][]string
+	runArgs      [][]string
 }
 
 func (f fakeCommander) CombinedOutput(name string, args ...string) ([]byte, error) {
-	return f.output, f.runErr
+	f.combinedArgs = append(f.combinedArgs, append([]string{name}, args...))
+	return f.output, f.combinedErr
 }
 
 func (f fakeCommander) Run(name string, args ...string) error {
+	f.runArgs = append(f.runArgs, append([]string{name}, args...))
 	return f.runErr
 }
 
@@ -115,7 +120,7 @@ func TestHandleToolsValidateSuccess(t *testing.T) {
 }
 
 func TestHandleToolsValidateFailure(t *testing.T) {
-	handler := &Handler{commander: fakeCommander{output: []byte("bad config"), runErr: errors.New("exit 1")}}
+	handler := &Handler{commander: fakeCommander{output: []byte("bad config"), combinedErr: errors.New("exit 1")}}
 	req := httptest.NewRequest(http.MethodGet, "/tools/validate", nil)
 	rec := httptest.NewRecorder()
 
@@ -124,7 +129,77 @@ func TestHandleToolsValidateFailure(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "bad config") {
+	if !strings.Contains(rec.Body.String(), "Validation failed:") || !strings.Contains(rec.Body.String(), "bad config") {
+		t.Fatalf("unexpected body: %s", rec.Body.String())
+	}
+}
+
+func TestHandleToolsWriteRejectsInvalidFalcoConfig(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "etc", "falco", "rules.yaml")
+
+	handler := &Handler{commander: fakeCommander{output: []byte("syntax error at line 3"), combinedErr: errors.New("exit 1")}}
+	body, _ := json.Marshal(WriteRequest{Path: target, Contents: "- rule: invalid"})
+	req := httptest.NewRequest(http.MethodPost, "/tools/write", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.HandleToolsWrite(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Validation failed:") || !strings.Contains(rec.Body.String(), "syntax error") {
+		t.Fatalf("unexpected body: %s", rec.Body.String())
+	}
+	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected file to be absent after failed validation, stat err=%v", err)
+	}
+}
+
+func TestHandleToolsEditRejectsInvalidFalcoConfig(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "etc", "falco", "rules.yaml")
+	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("a: 1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := &Handler{commander: fakeCommander{output: []byte("invalid rule"), combinedErr: errors.New("exit 1")}}
+	body, _ := json.Marshal(EditRequest{Path: target, OldContents: "a: 1", NewContents: "a: ["})
+	req := httptest.NewRequest(http.MethodPost, "/tools/edit", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.HandleToolsEdit(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Validation failed:") || !strings.Contains(rec.Body.String(), "invalid rule") {
+		t.Fatalf("unexpected body: %s", rec.Body.String())
+	}
+
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "a: 1\n" {
+		t.Fatalf("expected original contents unchanged, got: %s", string(data))
+	}
+}
+
+func TestHandleToolsRestartBlocksFalcoOnInvalidValidation(t *testing.T) {
+	handler := &Handler{commander: fakeCommander{output: []byte("bad config"), combinedErr: errors.New("exit 1")}}
+	req := httptest.NewRequest(http.MethodGet, "/tools/restart?toolname=falco", nil)
+	rec := httptest.NewRecorder()
+
+	handler.HandleToolsRestart(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Validation failed:") {
 		t.Fatalf("unexpected body: %s", rec.Body.String())
 	}
 }
