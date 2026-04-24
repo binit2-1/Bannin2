@@ -25,6 +25,12 @@ type EditRequest struct {
 	Path        string `json:"path"`
 }
 
+type ValidateRequest struct {
+	Rules    string `json:"rules"`
+	Path     string `json:"path"`
+	Toolname string `json:"toolname"`
+}
+
 type Commander interface {
 	CombinedOutput(name string, args ...string) ([]byte, error)
 	Run(name string, args ...string) error
@@ -169,9 +175,9 @@ func (h *Handler) HandleToolsWrite(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) HandleToolsValidate(w http.ResponseWriter, r *http.Request) {
-	result, err := h.validateFalcoBaseConfig()
+	result, status, err := h.validateRequest(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), status)
 		return
 	}
 
@@ -318,6 +324,53 @@ func shouldValidateFalcoPath(path string) bool {
 	return strings.Contains(cleanPath, "/falco/")
 }
 
+func (h *Handler) validateRequest(r *http.Request) (string, int, error) {
+	toolname := strings.TrimSpace(r.URL.Query().Get("toolname"))
+
+	if r.Method == http.MethodPost {
+		var req ValidateRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			return "", http.StatusBadRequest, fmt.Errorf("invalid JSON body")
+		}
+
+		if toolname == "" {
+			toolname = strings.TrimSpace(req.Toolname)
+		}
+
+		if toolname == "" && shouldValidateFalcoPath(req.Path) {
+			toolname = "falco"
+		}
+
+		if strings.TrimSpace(req.Rules) == "" {
+			return "", http.StatusBadRequest, fmt.Errorf("missing rules in request body")
+		}
+
+		switch strings.ToLower(toolname) {
+		case "falco":
+			result, err := h.validateFalcoRuleContents(req.Rules)
+			if err != nil {
+				return result, http.StatusBadRequest, err
+			}
+			return result, http.StatusOK, nil
+		case "":
+			return "", http.StatusBadRequest, fmt.Errorf("missing 'toolname' query parameter")
+		default:
+			return "", http.StatusBadRequest, fmt.Errorf("validation for tool %q is not supported", toolname)
+		}
+	}
+
+	switch strings.ToLower(toolname) {
+	case "", "falco":
+		result, err := h.validateFalcoBaseConfig()
+		if err != nil {
+			return result, http.StatusBadRequest, err
+		}
+		return result, http.StatusOK, nil
+	default:
+		return "", http.StatusBadRequest, fmt.Errorf("validation for tool %q is not supported", toolname)
+	}
+}
+
 func (h *Handler) validateFalcoBaseConfig() (string, error) {
 	output, err := h.commandRunner().CombinedOutput("sudo", "falco", "-c", "/etc/falco/falco.yaml", "--dry-run")
 	result := strings.TrimSpace(string(output))
@@ -326,7 +379,7 @@ func (h *Handler) validateFalcoBaseConfig() (string, error) {
 	}
 
 	if err != nil {
-		return result, fmt.Errorf("Validation failed:\n%s", result)
+		return result, fmt.Errorf("Falco validation failed for installed configuration:\n%s", result)
 	}
 
 	return result, nil
@@ -361,7 +414,7 @@ func (h *Handler) validateFalcoRuleContents(contents string) (string, error) {
 	}
 
 	if err != nil {
-		return result, fmt.Errorf("Validation failed:\n%s", result)
+		return result, fmt.Errorf("Falco validation failed for proposed rules:\n%s", result)
 	}
 
 	return result, nil

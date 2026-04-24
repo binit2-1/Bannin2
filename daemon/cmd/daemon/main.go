@@ -73,6 +73,7 @@ func startAgentAPIServer() error {
 	mux.HandleFunc("POST /tools/write", handler.HandleToolsWrite)
 	mux.HandleFunc("POST /tools/edit", handler.HandleToolsEdit)
 	mux.HandleFunc("GET /tools/validate", handler.HandleToolsValidate)
+	mux.HandleFunc("POST /tools/validate", handler.HandleToolsValidate)
 	mux.HandleFunc("GET /tools/restart", handler.HandleToolsRestart)
 	mux.HandleFunc("GET /tools/direnum", handler.HandleDirEnum)
 

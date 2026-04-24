@@ -19,6 +19,12 @@ export type DaemonValidationResult = {
   status: number;
 };
 
+export type DaemonActionResult = {
+  ok: boolean;
+  output: string;
+  status: number;
+};
+
 const daemonBaseUrl = env.daemonBaseUrl;
 
 const buildUrl = (pathname: string, query: Record<string, string>): string => {
@@ -43,6 +49,17 @@ const parseValidationResult = async (response: Response): Promise<DaemonValidati
   return {
     ok: response.ok,
     output: rawResult.length > 0 ? rawResult : "validation completed with no output",
+    status: response.status,
+  };
+};
+
+const parseActionResult = async (response: Response): Promise<DaemonActionResult> => {
+  const rawResult = (await response.text()).trim();
+  const normalized = rawResult.toLowerCase();
+
+  return {
+    ok: response.ok && normalized === "success",
+    output: rawResult.length > 0 ? rawResult : response.statusText || "no response body",
     status: response.status,
   };
 };
@@ -74,7 +91,7 @@ export const readWithToolApi = async (path: string): Promise<ReadToolResponse> =
   };
 };
 
-export const writeWithToolApi = async (path: string, contents: string): Promise<"success" | "error"> => {
+export const writeWithToolApi = async (path: string, contents: string): Promise<DaemonActionResult> => {
   logger.debug("write request", { path, bytes: contents.length });
   const response = await requestDaemon("/tools/write", {
     method: "POST",
@@ -84,12 +101,13 @@ export const writeWithToolApi = async (path: string, contents: string): Promise<
     body: JSON.stringify({ contents }),
   }, { path });
 
-  if (!response.ok) {
-    logger.error("write failed", { path, status: response.status });
-    return "error";
+  const result = await parseActionResult(response);
+  if (!result.ok) {
+    logger.error("write failed", { path, status: result.status, output: result.output });
+    return result;
   }
-  const result = await parseSuccessOrError(response);
-  logger.debug("write result", { path, result });
+
+  logger.debug("write result", { path, result: result.output });
   return result;
 };
 
@@ -128,18 +146,19 @@ export const editWithToolApi = async (
   return result;
 };
 
-export const restartToolWithApi = async (tool: toolname): Promise<"success" | "error"> => {
+export const restartToolWithApi = async (tool: toolname): Promise<DaemonActionResult> => {
   logger.debug("restart request", { tool });
   const response = await requestDaemon("/tools/restart", {
     method: "GET",
   }, { toolname: tool });
 
-  if (!response.ok) {
-    logger.error("restart failed", { tool, status: response.status });
-    return "error";
+  const result = await parseActionResult(response);
+  if (!result.ok) {
+    logger.error("restart failed", { tool, status: result.status, output: result.output });
+    return result;
   }
-  const result = await parseSuccessOrError(response);
-  logger.debug("restart result", { tool, result });
+
+  logger.debug("restart result", { tool, result: result.output });
   return result;
 };
 
@@ -179,7 +198,7 @@ export const validateRulesWithToolApiDetailed = async (
       headers: {
         "content-type": "application/json",
       },
-      body: JSON.stringify({ rules }),
+      body: JSON.stringify({ rules, toolname: tool }),
     },
     { toolname: tool },
   );

@@ -117,8 +117,10 @@ Build a summary optimized for high-signal, low-noise detection rule writing.`;
   }
 
   const writeStatus = await writeWithToolApi(PROJECT_SUMMARY_REMOTE_PATH, finalSummary);
-  if (writeStatus !== "success") {
-    throw new Error(`Failed to write summary to daemon path: ${PROJECT_SUMMARY_REMOTE_PATH}`);
+  if (!writeStatus.ok) {
+    throw new Error(
+      `Failed to write summary to daemon path ${PROJECT_SUMMARY_REMOTE_PATH}: ${writeStatus.output}`,
+    );
   }
 
   logger.debug("summary written", {

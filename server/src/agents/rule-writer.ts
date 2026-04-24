@@ -51,6 +51,12 @@ export type RuleWriterDraft = {
   rules: string;
 };
 
+export type RuleWriterRevisionInput = {
+  attemptNumber: number;
+  previousRules?: string;
+  validationError?: string;
+};
+
 const createRuleWriterAgent = (skillContext: string, outputFile: string, selectedTool: toolname) =>
   new Agent({
     name: "Rule Writer Agent",
@@ -87,6 +93,7 @@ Canonical output path: ${outputFile}
 export async function runRuleWriterAgent(
   selectedTool: toolname,
   projectSummary?: string,
+  revision?: RuleWriterRevisionInput,
 ): Promise<RuleWriterDraft> {
   logger.info("start", { tool: selectedTool });
 
@@ -100,13 +107,28 @@ export async function runRuleWriterAgent(
     selectedTool,
   );
 
+  const revisionContext =
+    revision && revision.attemptNumber > 1
+      ? `
+
+Revision attempt: ${revision.attemptNumber}
+
+Previous draft that failed validation:
+${revision.previousRules ?? "[previous draft unavailable]"}
+
+Validation error from daemon that must be fixed completely:
+${revision.validationError ?? "[validation error unavailable]"}
+
+Rewrite the rules so the validation error is resolved while keeping the useful intent of the previous draft. Return only the full corrected rules file.`
+      : "";
+
   const input = `Task: Create custom detection rules for "${selectedTool}".
 
 Project Summary (authoritative context from backend):
 ${resolvedProjectSummary}
 
 Read the existing custom rules file first if it exists at:
-${guidance.toolConfig.outputFile}`;
+${guidance.toolConfig.outputFile}${revisionContext}`;
 
   const result = await run(agent, input, { session, maxTurns: 20 });
   const rules = String(result.finalOutput ?? "").trim();

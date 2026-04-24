@@ -38,8 +38,9 @@ export const generateRules = async (req: Request, res: Response) => {
 
     return res.status(200).send("success");
   } catch (error) {
-    logger.error("generate rules failed", { error: String(error) });
-    return res.status(500).send("error");
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error("generate rules failed", { error: message });
+    return res.status(500).send(message);
   }
 };
 
@@ -61,7 +62,8 @@ export const generateSummary = async (req: Request, res: Response) => {
     logger.info("generate summary completed", { projectRoot: projectRoot.trim() });
     return res.status(200).send("success");
   } catch (error) {
-    logger.error("generate summary failed", { error: String(error) });
-    return res.status(500).send("error");
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error("generate summary failed", { error: message });
+    return res.status(500).send(message);
   }
 };

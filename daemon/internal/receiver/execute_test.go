@@ -126,10 +126,42 @@ func TestHandleToolsValidateFailure(t *testing.T) {
 
 	handler.HandleToolsValidate(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "Validation failed:") || !strings.Contains(rec.Body.String(), "bad config") {
+	if !strings.Contains(rec.Body.String(), "Falco validation failed for installed configuration:") || !strings.Contains(rec.Body.String(), "bad config") {
+		t.Fatalf("unexpected body: %s", rec.Body.String())
+	}
+}
+
+func TestHandleToolsValidateDraftRulesSuccess(t *testing.T) {
+	handler := &Handler{commander: fakeCommander{output: []byte("draft ok")}}
+	body, _ := json.Marshal(ValidateRequest{Rules: "- rule: ok", Toolname: "falco"})
+	req := httptest.NewRequest(http.MethodPost, "/tools/validate?toolname=falco", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.HandleToolsValidate(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if strings.TrimSpace(rec.Body.String()) != "draft ok" {
+		t.Fatalf("unexpected body: %q", rec.Body.String())
+	}
+}
+
+func TestHandleToolsValidateDraftRulesFailure(t *testing.T) {
+	handler := &Handler{commander: fakeCommander{output: []byte("syntax error at line 8"), combinedErr: errors.New("exit 1")}}
+	body, _ := json.Marshal(ValidateRequest{Rules: "- rule: bad", Toolname: "falco"})
+	req := httptest.NewRequest(http.MethodPost, "/tools/validate?toolname=falco", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.HandleToolsValidate(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Falco validation failed for proposed rules:") || !strings.Contains(rec.Body.String(), "syntax error at line 8") {
 		t.Fatalf("unexpected body: %s", rec.Body.String())
 	}
 }
@@ -148,7 +180,7 @@ func TestHandleToolsWriteRejectsInvalidFalcoConfig(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "Validation failed:") || !strings.Contains(rec.Body.String(), "syntax error") {
+	if !strings.Contains(rec.Body.String(), "Falco validation failed for proposed rules:") || !strings.Contains(rec.Body.String(), "syntax error") {
 		t.Fatalf("unexpected body: %s", rec.Body.String())
 	}
 	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
@@ -176,7 +208,7 @@ func TestHandleToolsEditRejectsInvalidFalcoConfig(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "Validation failed:") || !strings.Contains(rec.Body.String(), "invalid rule") {
+	if !strings.Contains(rec.Body.String(), "Falco validation failed for proposed rules:") || !strings.Contains(rec.Body.String(), "invalid rule") {
 		t.Fatalf("unexpected body: %s", rec.Body.String())
 	}
 
@@ -199,7 +231,7 @@ func TestHandleToolsRestartBlocksFalcoOnInvalidValidation(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "Validation failed:") {
+	if !strings.Contains(rec.Body.String(), "Falco validation failed for installed configuration:") {
 		t.Fatalf("unexpected body: %s", rec.Body.String())
 	}
 }
