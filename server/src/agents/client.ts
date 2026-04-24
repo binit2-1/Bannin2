@@ -4,12 +4,13 @@ import { env } from "../config/env.js";
 
 console.log("Initializing OpenAI client with base URL:", env.openAiBaseUrl);
 
-const openAiClient = new OpenAI({
+export const openAiClient = new OpenAI({
   baseURL: env.openAiBaseUrl,
   apiKey: env.openAiApiKey,
 });
 
-export const DEFAULT_MODEL = "";
+export const DEFAULT_MODEL = env.openAiModel;
+export const FAST_MODEL = env.openAiFastModel;
 
 // Backward-compatible alias used by existing imports.
 export const model = DEFAULT_MODEL;

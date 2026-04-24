@@ -1,9 +1,9 @@
 import type { Request, Response } from "express";
 import { toolname } from "../../generated/prisma/enums.js";
-import { runRuleWriterAgent } from "../agents/rule-writer.js";
 import { runProjectSummariserAgent } from "../agents/project-summariser.js";
 import { getSingleQueryValue } from "../http/requestParsers.js";
 import { createLogger } from "../utils/logger.js";
+import { runRuleGenerationService } from "../services/ruleGenerationService.js";
 
 const logger = createLogger("generate.controller");
 
@@ -28,10 +28,12 @@ export const generateRules = async (req: Request, res: Response) => {
     const projectSummary =
       typeof contents === "string" && contents.trim().length > 0 ? contents.trim() : undefined;
 
-    await runRuleWriterAgent(selectedTool, projectSummary);
+    const result = await runRuleGenerationService(selectedTool, projectSummary);
     logger.info("generate rules completed", {
       tool: selectedTool,
       hasSummary: Boolean(projectSummary),
+      outputFile: result.outputFile,
+      rulesBytes: result.rulesBytes,
     });
 
     return res.status(200).send("success");

@@ -13,6 +13,12 @@ type DirenumToolResponse = {
   contents: string;
 };
 
+export type DaemonValidationResult = {
+  ok: boolean;
+  output: string;
+  status: number;
+};
+
 const daemonBaseUrl = env.daemonBaseUrl;
 
 const buildUrl = (pathname: string, query: Record<string, string>): string => {
@@ -31,6 +37,15 @@ const parseSuccessOrError = async (response: Response): Promise<"success" | "err
 
 const requestDaemon = async (pathname: string, options: RequestInit, query: Record<string, string> = {}) =>
   fetch(buildUrl(pathname, query), options);
+
+const parseValidationResult = async (response: Response): Promise<DaemonValidationResult> => {
+  const rawResult = (await response.text()).trim();
+  return {
+    ok: response.ok,
+    output: rawResult.length > 0 ? rawResult : "validation completed with no output",
+    status: response.status,
+  };
+};
 
 export const readWithToolApi = async (path: string): Promise<ReadToolResponse> => {
   logger.debug("read request", { path });
@@ -151,27 +166,57 @@ export const direnumWithToolApi = async (level: number, path: string): Promise<D
   };
 };
 
-export const validateRulesWithToolApi = async (tool: toolname, rules: string): Promise<string> => {
+export const validateRulesWithToolApiDetailed = async (
+  tool: toolname,
+  rules: string,
+): Promise<DaemonValidationResult> => {
   logger.debug("validate rules request", { tool, bytes: rules.length });
-  const response = await requestDaemon("/tools/validate", {
-    method: "GET",
-  }, { toolname: tool });
 
-  const rawResult = (await response.text()).trim();
-  const result = rawResult.length > 0 ? rawResult : "validation completed with no output";
+  const postResponse = await requestDaemon(
+    "/tools/validate",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ rules }),
+    },
+    { toolname: tool },
+  );
 
-  if (!response.ok) {
+  let result = await parseValidationResult(postResponse);
+
+  if (postResponse.status === 404 || postResponse.status === 405) {
+    logger.warn("validate rules POST unsupported, falling back to GET", {
+      tool,
+      status: postResponse.status,
+    });
+
+    const fallbackResponse = await requestDaemon("/tools/validate", {
+      method: "GET",
+    }, { toolname: tool });
+
+    result = await parseValidationResult(fallbackResponse);
+  }
+
+  if (!result.ok) {
     logger.error("validate rules failed", {
       tool,
-      status: response.status,
-      output: result,
+      status: result.status,
+      output: result.output,
     });
     return result;
   }
+
   logger.debug("validate rules result", {
     tool,
-    status: response.status,
-    output: result,
+    status: result.status,
+    output: result.output,
   });
   return result;
+};
+
+export const validateRulesWithToolApi = async (tool: toolname, rules: string): Promise<string> => {
+  const result = await validateRulesWithToolApiDetailed(tool, rules);
+  return result.output;
 };

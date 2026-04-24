@@ -32,5 +32,7 @@ export const env = {
   redisUrl: process.env.REDIS_URL ?? "redis://localhost:6379",
   openAiBaseUrl: process.env.OPENAI_BASE_URL,
   openAiApiKey: process.env.OPENAI_API_KEY,
+  openAiModel: process.env.OPENAI_MODEL ?? "gpt-5.4",
+  openAiFastModel: process.env.OPENAI_FAST_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-5.4-mini",
   databaseUrl: process.env.DATABASE_URL ?? "",
 };
