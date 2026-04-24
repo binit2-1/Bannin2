@@ -34,12 +34,12 @@
 ## Architecture
 
 ```
-┌──────────────┐       HTTP / WebSocket        ┌──────────────┐
+┌──────────────┐            HTTP               ┌──────────────┐
 │    Client    │ ◄───────────────────────────► │    Server    │
 │ (TypeScript) │                               │ (TypeScript) │
 └──────────────┘                               └──────┬───────┘
                                                       │
-                                              IPC / Socket / HTTP
+                                                     HTTP
                                                       │
                                                ┌──────▼───────┐
                                                │    Daemon    │
@@ -135,25 +135,3 @@ Each service lives in its own directory and can be developed independently. Reco
 Check each subdirectory for its own `package.json` (TypeScript services) or `go.mod` (daemon) for environment-specific scripts and dependencies.
 
 ---
-
-## Contributing
-
-Contributions are welcome! To get started:
-
-1. Fork the repository.
-2. Create a feature branch: `git checkout -b feat/your-feature`.
-3. Commit your changes: `git commit -m "feat: describe your change"`.
-4. Push the branch: `git push origin feat/your-feature`.
-5. Open a Pull Request.
-
-Please keep PRs focused and include a clear description of what changed and why.
-
----
-
-## License
-
-This project does not currently include a license file. Please contact the author before using this code in your own projects.
-
----
-
-Built with ❤️ by [Shreehari Acharya](https://shreehari.dev)
