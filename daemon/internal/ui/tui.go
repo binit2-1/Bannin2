@@ -224,7 +224,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.syncViewport()
 			return m, nil
 		}
-		m.logs = append(m.logs, m.Success("Falco installation finished"))
+		m.logs = append(m.logs, m.Success("auditd installation finished"))
 		m.state = stateProjectPath
 		m.textInput.SetValue("")
 		m.textInput.Focus()
@@ -245,7 +245,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.logs = append(m.logs, m.Info("Project summary generated"))
 			m.logs = append(m.logs, m.Command(truncateLine(msg.text, 140)))
 		}
-		m.logs = append(m.logs, m.Info("Generating Falco rules from backend"))
+		m.logs = append(m.logs, m.Info("Generating auditd rules from backend"))
 		m.state = stateGeneratingRules
 		m.syncViewport()
 		return m, generateRulesCmd(m.tools, m.summaryText, m.backendURL)
@@ -255,8 +255,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.logs = append(m.logs, m.Error(msg.err.Error()))
 		} else {
 			m.logs = append(m.logs, m.Success("Rule generation completed"))
-			m.logs = append(m.logs, m.Info("Falco rules target: /etc/falco/rules.d/bannin-rules.yaml"))
-			m.logs = append(m.logs, m.Info("Falco config target: /etc/falco/config.d/bannin.yaml"))
+			m.logs = append(m.logs, m.Info("auditd rules target: /etc/audit/rules.d/bannin.rules"))
+			m.logs = append(m.logs, m.Info("auditd log source: /var/log/audit/audit.log"))
 		}
 		m.state = stateAskRestart
 		m.yesSelected = true
@@ -267,7 +267,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.logs = append(m.logs, m.Error(msg.err.Error()))
 		} else {
-			m.logs = append(m.logs, m.Success("Falco service restarted"))
+			m.logs = append(m.logs, m.Success("auditd service restarted"))
 		}
 		m.state = stateDone
 		m.syncViewport()
@@ -351,7 +351,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				if !m.runAnalysis || strings.TrimSpace(m.projectPath) == "" {
-					m.logs = append(m.logs, m.Info("Skipping project summary and generating Falco rules directly"))
+					m.logs = append(m.logs, m.Info("Skipping project summary and generating auditd rules directly"))
 					m.state = stateGeneratingRules
 					m.syncViewport()
 					return m, generateRulesCmd(m.tools, "", m.backendURL)
@@ -376,7 +376,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 
-				m.logs = append(m.logs, m.Info("Restarting Falco service"))
+				m.logs = append(m.logs, m.Info("Restarting auditd service"))
 				m.state = stateRestarting
 				m.syncViewport()
 				return m, restartServicesCmd(m.tools)
@@ -402,19 +402,19 @@ func (m model) View() string {
 	case stateInstalling:
 		return m.viewInstall()
 	case stateProjectPath:
-		return m.viewPrompt("Project Context", "Enter a project path to improve backend-generated Falco rules, or press enter to skip.", m.textInput.View())
+		return m.viewPrompt("Project Context", "Enter a project path to improve backend-generated auditd rules, or press enter to skip.", m.textInput.View())
 	case stateAskAnalyze:
-		return m.viewPrompt("Project Analysis", "Should the backend analyze the project before generating Falco rules?", renderYesNo(m.yesSelected))
+		return m.viewPrompt("Project Analysis", "Should the backend analyze the project before generating auditd rules?", renderYesNo(m.yesSelected))
 	case stateAskRules:
-		return m.viewPrompt("Rule Generation", "Should the backend generate Falco rules after setup?", renderYesNo(m.yesSelected))
+		return m.viewPrompt("Rule Generation", "Should the backend generate auditd rules after setup?", renderYesNo(m.yesSelected))
 	case stateGeneratingSummary:
 		return m.viewWorking("Generating project summary")
 	case stateGeneratingRules:
-		return m.viewWorking("Generating Falco rules")
+		return m.viewWorking("Generating auditd rules")
 	case stateAskRestart:
-		return m.viewPrompt("Restart Falco", "Restart Falco now to pick up the generated config and rules?", renderYesNo(m.yesSelected))
+		return m.viewPrompt("Restart auditd", "Restart auditd now to pick up the generated rules?", renderYesNo(m.yesSelected))
 	case stateRestarting:
-		return m.viewWorking("Restarting Falco")
+		return m.viewWorking("Restarting auditd")
 	case stateDone:
 		return m.viewDone()
 	default:
@@ -426,15 +426,16 @@ func (m model) viewIntro() string {
 	body := strings.Join([]string{
 		heroStyle.Render("BANNIN"),
 		"",
-		titleStyle.Render("Falco-first setup"),
+		titleStyle.Render("auditd-only setup"),
 		" ",
-		subtleStyle.Render("This guided flow installs and configures Falco, connects it to the local event listener, and can optionally ask the backend to generate Falco rules."),
+		subtleStyle.Render("This guided flow installs and configures auditd, tails the local audit log, and can optionally ask the backend to generate auditd rules."),
 		"",
 		accentStyle.Render("What this setup does"),
-		"  • installs Falco if it is missing",
-		"  • writes `/etc/falco/config.d/bannin.yaml`",
+		"  • installs auditd if it is missing",
+		"  • writes `/etc/audit/rules.d/bannin.rules`",
 		"  • can request rule generation from `BANNIN_BACKEND_URL`",
-		"  • can restart Falco after config changes",
+		"  • tails `/var/log/audit/audit.log` and forwards events",
+		"  • can restart auditd after rule changes",
 		"",
 		"",
 		subtleStyle.Render("Press enter to start."),
@@ -452,7 +453,7 @@ func (m model) viewInstall() string {
 	}
 
 	body := strings.Join([]string{
-		titleStyle.Render("Installing Falco"),
+		titleStyle.Render("Installing auditd"),
 		fmt.Sprintf("%s  %s", m.spinner.View(), subtleStyle.Render("streaming installer output")),
 		"",
 		m.progress.ViewAs(pct),
@@ -510,7 +511,7 @@ func (m model) startInstall() (tea.Model, tea.Cmd) {
 	m.totalSteps = len(m.tools) * 3
 	m.completedSteps = 0
 	m.logs = []string{
-		m.Info("Starting Falco setup"),
+		m.Info("Starting auditd setup"),
 		m.Info("Installer output will stream below"),
 	}
 	m.syncViewport()

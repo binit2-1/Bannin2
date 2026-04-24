@@ -8,10 +8,7 @@ datasource db {
 }
 
 enum toolname {
-  falco
-  suricata
-  wazuh
-  zeek
+  auditd
 }
 
 model event {

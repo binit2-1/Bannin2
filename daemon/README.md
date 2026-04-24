@@ -1,6 +1,6 @@
 # Bannin Daemon
 
-`daemon/` contains the local agent API, Falco event listener, guided terminal setup, and backend dispatch logic used by Bannin.
+`daemon/` contains the local agent API, auditd log tailer, guided terminal setup, and backend dispatch logic used by Bannin.
 
 ## Backend URL Configuration
 
@@ -12,14 +12,12 @@ Update that constant if your backend is running elsewhere.
 
 ## Terminal Flow
 
-`go run ./cmd/daemon init` now provides a guided Falco-only setup experience:
+`go run ./cmd/daemon init` now provides a guided auditd-only setup experience:
 
-1. Install and configure Falco
+1. Install and configure auditd
 2. Optionally collect a project path for backend context
-3. Optionally request Falco rule generation from the hardcoded backend URL
-4. Optionally restart Falco
-
-The setup no longer prompts users about installing Suricata or Wazuh.
+3. Optionally request auditd rule generation from the hardcoded backend URL
+4. Optionally restart auditd
 
 ## Tests
 
@@ -32,7 +30,7 @@ env GOCACHE=/tmp/go-cache go test ./...
 The test suite covers both positive and negative paths for:
 
 - install orchestration
-- Falco installer behavior
+- auditd installer behavior
 - backend HTTP dispatching
 - local receiver HTTP handlers
-- Falco event ingestion
+- auditd log ingestion

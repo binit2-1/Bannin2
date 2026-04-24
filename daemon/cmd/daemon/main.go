@@ -20,6 +20,7 @@ import (
 )
 
 const backendURL = "http://localhost:4000"
+const auditLogPath = "/var/log/audit/audit.log"
 
 func main() {
 	fmt.Printf("backend URL configured as %s\n", backendURL)
@@ -38,9 +39,9 @@ func main() {
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		fmt.Println(watchers.DescribeFalcoListener("8081"))
-		if err := watchers.StartFalcoHTTP("8081", eventQueue); err != nil {
-			fmt.Printf("fatal error starting Falco watcher: %v\n", err)
+		fmt.Println(watchers.DescribeAuditLogTailer(auditLogPath))
+		if err := watchers.StartAuditLogTailer(auditLogPath, 2*time.Second, eventQueue); err != nil {
+			fmt.Printf("fatal error starting auditd log tailer: %v\n", err)
 			os.Exit(1)
 		}
 	}()
@@ -101,7 +102,7 @@ func startAgentAPIServer() error {
 
 func runInstallerUI(backendURL string) {
 	tools := []installers.SecurityTools{
-		installers.NewFalcoTool(),
+		installers.NewAuditdTool(),
 	}
 
 	program := tea.NewProgram(ui.InitialModel(tools, backendURL), tea.WithAltScreen())

@@ -41,7 +41,7 @@ func collectMessages(ch <-chan tea.Msg) []tea.Msg {
 
 func TestRunInstallPipelineSuccess(t *testing.T) {
 	ch := make(chan tea.Msg, 32)
-	tools := []installers.SecurityTools{fakeTool{name: "Falco"}}
+	tools := []installers.SecurityTools{fakeTool{name: "Auditd"}}
 
 	RunInstallPipeline(tools, fakeFormatter{}, ch)
 	msgs := collectMessages(ch)
@@ -72,7 +72,7 @@ func TestRunInstallPipelineSuccess(t *testing.T) {
 
 func TestRunInstallPipelineStopsOnConfigureError(t *testing.T) {
 	ch := make(chan tea.Msg, 32)
-	tools := []installers.SecurityTools{fakeTool{name: "Falco", configureErr: errors.New("bad config")}}
+	tools := []installers.SecurityTools{fakeTool{name: "Auditd", configureErr: errors.New("bad config")}}
 
 	RunInstallPipeline(tools, fakeFormatter{}, ch)
 	msgs := collectMessages(ch)

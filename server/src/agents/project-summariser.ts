@@ -62,7 +62,7 @@ const createProjectSummariserAgent = (projectRoot: string) => {
     name: "Project Summariser Agent",
     instructions: `
 You are a senior application security engineer.
-Your task is to analyze a source code project and produce a summary used by rule writers for Falco, Suricata, Wazuh, and Zeek.
+Your task is to analyze a source code project and produce a summary used by an auditd rule writer.
 
 Critical objective:
 - Reduce noisy alerts by capturing true expected behavior.
@@ -83,11 +83,7 @@ Required output format (markdown):
 - Scheduled Jobs, Automation, and Batch Flows
 - Likely False-Positive Sources (with precise guardrails)
 - Must-Detect Threat Behaviors (do not suppress)
-- Tool-Specific Notes:
-  - Falco
-  - Suricata
-  - Wazuh
-  - Zeek
+- Auditd-Specific Notes
 - Rule-Writing Inputs (final checklist for downstream rule writer)
 
 Strict rules:

@@ -1,4 +1,4 @@
-import type { toolname } from "../../generated/prisma/enums.js";
+import type { toolname } from "../domain/toolname.js";
 import { runRuleWriterAgent } from "../agents/rule-writer.js";
 import {
   restartToolWithApi,

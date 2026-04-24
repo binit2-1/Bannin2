@@ -4,7 +4,7 @@ import { model } from "./client.js";
 import {
   readWithToolApi,
 } from "../services/daemonToolsClient.js";
-import type { toolname } from "../../generated/prisma/enums.js";
+import type { toolname } from "../domain/toolname.js";
 import { PROJECT_SUMMARY_REMOTE_PATH } from "./project-summariser.js";
 import { createLogger } from "../utils/logger.js";
 import { RedisSession } from "./memory/redis.js";

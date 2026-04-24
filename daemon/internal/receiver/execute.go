@@ -158,8 +158,8 @@ func (h *Handler) HandleToolsWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if shouldValidateFalcoPath(path) {
-		if _, err := h.validateFalcoRuleContents(req.Contents); err != nil {
+	if shouldValidateAuditdPath(path) {
+		if _, err := h.validateAuditdRuleContents(req.Contents); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -217,8 +217,8 @@ func (h *Handler) HandleToolsEdit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	updated := strings.Replace(content, req.OldContents, req.NewContents, 1)
-	if shouldValidateFalcoPath(path) {
-		if _, err := h.validateFalcoRuleContents(updated); err != nil {
+	if shouldValidateAuditdPath(path) {
+		if _, err := h.validateAuditdRuleContents(updated); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -240,11 +240,21 @@ func (h *Handler) HandleToolsRestart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.EqualFold(toolname, "falco") {
-		if _, err := h.validateFalcoBaseConfig(); err != nil {
+	switch strings.ToLower(toolname) {
+	case "auditd":
+		if _, err := h.validateAuditdBaseConfig(); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if result, err := h.loadAuditdRules(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		} else if strings.TrimSpace(result) != "" {
+			agentLog("auditd reload output: %s", result)
+		}
+	default:
+		http.Error(w, fmt.Sprintf("restart for tool %q is not supported", toolname), http.StatusBadRequest)
+		return
 	}
 
 	if err := h.commandRunner().Run("systemctl", "restart", toolname); err != nil {
@@ -298,9 +308,9 @@ func (h *Handler) HandleDirEnum(w http.ResponseWriter, r *http.Request) {
 
 		indent := strings.Repeat("  ", depth)
 		if info.IsDir() {
-			fmt.Fprintf(&sb, "%s📁 %s/\n", indent, info.Name())
+			fmt.Fprintf(&sb, "%sDIR %s/\n", indent, info.Name())
 		} else {
-			fmt.Fprintf(&sb, "%s📄 %s\n", indent, info.Name())
+			fmt.Fprintf(&sb, "%sFILE %s\n", indent, info.Name())
 		}
 		return nil
 	})
@@ -319,9 +329,10 @@ func resolveRequestPath(r *http.Request, fallback string) (string, error) {
 	return resolvePath(rawPath)
 }
 
-func shouldValidateFalcoPath(path string) bool {
+func shouldValidateAuditdPath(path string) bool {
 	cleanPath := filepath.ToSlash(strings.ToLower(path))
-	return strings.Contains(cleanPath, "/falco/")
+	return strings.Contains(cleanPath, "/audit/") &&
+		(strings.Contains(cleanPath, "/rules.d/") || strings.HasSuffix(cleanPath, "/audit.rules"))
 }
 
 func (h *Handler) validateRequest(r *http.Request) (string, int, error) {
@@ -336,18 +347,16 @@ func (h *Handler) validateRequest(r *http.Request) (string, int, error) {
 		if toolname == "" {
 			toolname = strings.TrimSpace(req.Toolname)
 		}
-
-		if toolname == "" && shouldValidateFalcoPath(req.Path) {
-			toolname = "falco"
+		if toolname == "" && shouldValidateAuditdPath(req.Path) {
+			toolname = "auditd"
 		}
-
 		if strings.TrimSpace(req.Rules) == "" {
 			return "", http.StatusBadRequest, fmt.Errorf("missing rules in request body")
 		}
 
 		switch strings.ToLower(toolname) {
-		case "falco":
-			result, err := h.validateFalcoRuleContents(req.Rules)
+		case "auditd":
+			result, err := h.validateAuditdRuleContents(req.Rules)
 			if err != nil {
 				return result, http.StatusBadRequest, err
 			}
@@ -360,8 +369,8 @@ func (h *Handler) validateRequest(r *http.Request) (string, int, error) {
 	}
 
 	switch strings.ToLower(toolname) {
-	case "", "falco":
-		result, err := h.validateFalcoBaseConfig()
+	case "", "auditd":
+		result, err := h.validateAuditdBaseConfig()
 		if err != nil {
 			return result, http.StatusBadRequest, err
 		}
@@ -371,50 +380,66 @@ func (h *Handler) validateRequest(r *http.Request) (string, int, error) {
 	}
 }
 
-func (h *Handler) validateFalcoBaseConfig() (string, error) {
-	output, err := h.commandRunner().CombinedOutput("sudo", "falco", "-c", "/etc/falco/falco.yaml", "--dry-run")
+func (h *Handler) validateAuditdBaseConfig() (string, error) {
+	output, err := h.commandRunner().CombinedOutput("sudo", "augenrules", "--check")
 	result := strings.TrimSpace(string(output))
 	if result == "" {
-		result = "validation completed with no output"
+		result = "auditd validation completed with no output"
 	}
 
 	if err != nil {
-		return result, fmt.Errorf("Falco validation failed for installed configuration:\n%s", result)
+		return result, fmt.Errorf("auditd validation failed for installed configuration:\n%s", result)
 	}
 
 	return result, nil
 }
 
-func (h *Handler) validateFalcoRuleContents(contents string) (string, error) {
-	tmpFile, err := os.CreateTemp("", "falco-validate-*.yaml")
-	if err != nil {
-		return "", fmt.Errorf("failed to create validation temp file: %w", err)
-	}
-	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
+func (h *Handler) validateAuditdRuleContents(contents string) (string, error) {
+	lines := strings.Split(contents, "\n")
+	for index, rawLine := range lines {
+		line := strings.TrimSpace(rawLine)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
 
-	if _, err := tmpFile.WriteString(contents); err != nil {
-		_ = tmpFile.Close()
-		return "", fmt.Errorf("failed to write validation temp file: %w", err)
-	}
-
-	if err := tmpFile.Close(); err != nil {
-		return "", fmt.Errorf("failed to close validation temp file: %w", err)
+		if err := validateAuditdRuleLine(line, index+1); err != nil {
+			return err.Error(), fmt.Errorf("auditd validation failed for proposed rules:\n%s", err.Error())
+		}
 	}
 
-	output, err := h.commandRunner().CombinedOutput(
-		"sudo", "falco",
-		"-c", "/etc/falco/falco.yaml",
-		"-r", tmpPath,
-		"--dry-run",
-	)
+	return "auditd draft passed static validation", nil
+}
+
+func validateAuditdRuleLine(line string, lineNumber int) error {
+	allowedPrefixes := []string{
+		"-a ", "-A ", "-w ", "-W ", "-b ", "-f ", "-e ", "-D", "--loginuid-immutable",
+	}
+	for _, prefix := range allowedPrefixes {
+		if strings.HasPrefix(line, prefix) {
+			if strings.HasPrefix(line, "-a ") || strings.HasPrefix(line, "-A ") {
+				if !strings.Contains(line, "-S ") {
+					return fmt.Errorf("line %d: syscall rule must include at least one -S filter: %s", lineNumber, line)
+				}
+			}
+			if (strings.HasPrefix(line, "-a ") || strings.HasPrefix(line, "-A ") || strings.HasPrefix(line, "-w ")) && !strings.Contains(line, "-k ") {
+				return fmt.Errorf("line %d: rule must include a stable -k key: %s", lineNumber, line)
+			}
+			return nil
+		}
+	}
+
+	return fmt.Errorf("line %d: unsupported auditd rule directive: %s", lineNumber, line)
+}
+
+func (h *Handler) loadAuditdRules() (string, error) {
+	output, err := h.commandRunner().CombinedOutput("sudo", "augenrules", "--load")
 	result := strings.TrimSpace(string(output))
 	if result == "" {
-		result = "validation completed with no output"
+		result = "auditd rules loaded with no output"
 	}
 
 	if err != nil {
-		return result, fmt.Errorf("Falco validation failed for proposed rules:\n%s", result)
+		return result, fmt.Errorf("auditd validation failed while loading rules:\n%s", result)
 	}
 
 	return result, nil

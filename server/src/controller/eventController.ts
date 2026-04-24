@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { prisma } from "../exports/prisma.js";
-import { toolname } from "../../generated/prisma/enums.js";
+import { TOOL_NAMES, type toolname } from "../domain/toolname.js";
 import { enqueueThreatAnalysis } from "../services/threatAnalysisQueue.js";
 import { getSignedThreatReportUrl } from "../services/awsReportStorage.js";
 import {
@@ -15,7 +15,7 @@ const logger = createLogger("event.controller");
 
 const isValidToolName = (value: unknown): value is toolname =>
   typeof value === "string" &&
-  Object.values(toolname).includes(value as toolname);
+  TOOL_NAMES.includes(value as toolname);
 
 export const createEvent = async (req: Request, res: Response) => {
   try {
@@ -145,7 +145,7 @@ export const getAllEvents = async (req: Request, res: Response) => {
     });
 
     const signedEvents = await Promise.all(
-      events.map(async (event) => ({
+      events.map(async (event: any) => ({
         ...event,
         reportUrl: event.reportUrl ? await getSignedThreatReportUrl(event.reportUrl) : "",
       })),

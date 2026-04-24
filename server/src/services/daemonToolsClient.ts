@@ -1,4 +1,4 @@
-import { toolname } from "../../generated/prisma/enums.js";
+import type { toolname } from "../domain/toolname.js";
 import { env } from "../config/env.js";
 import { createLogger } from "../utils/logger.js";
 

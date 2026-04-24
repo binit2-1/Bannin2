@@ -8,10 +8,7 @@ import (
 type SecTool = string
 
 const (
-	FALCO    SecTool = "falco"
-	SURICATA SecTool = "suricata"
-	WAZUH    SecTool = "wazuh"
-	ZEEK     SecTool = "zeek"
+	AUDITD SecTool = "auditd"
 )
 
 type SecEvent struct {

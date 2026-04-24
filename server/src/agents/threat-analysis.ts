@@ -1,6 +1,6 @@
 import { Agent, run } from "@openai/agents";
 import model from "./client.js";
-import type { toolname } from "../../generated/prisma/enums.js";
+import type { toolname } from "../domain/toolname.js";
 import { createLogger } from "../utils/logger.js";
 import { RedisSession } from "./memory/redis.js";
 

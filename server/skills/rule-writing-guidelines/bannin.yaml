@@ -13,40 +13,11 @@ global:
     - "Write custom rules into local/custom include locations only."
 
 tools:
-  falco:
-    output_file: "/etc/falco/rules.d/bannin-rules.yaml"
-    local_override_file: "/etc/falco/falco_rules.local.yaml"
-    config_file: "/etc/falco/falco.yaml"
-    validate_command: "falco --validate /etc/falco/falco.yaml"
-    apply_command: "systemctl restart falco"
+  auditd:
+    output_file: "/etc/audit/rules.d/bannin.rules"
+    config_file: "/etc/audit/auditd.conf"
+    validate_command: "augenrules --check"
+    apply_command: "augenrules --load && systemctl restart auditd"
     notes:
-      - "Prefer macros/lists/exceptions to keep rules readable and tunable."
-      - "Use exceptions for known-benign process/file combinations."
-
-  suricata:
-    output_file: "/etc/suricata/rules/bannin.rules"
-    local_rules_file: "/etc/suricata/rules/local.rules"
-    config_file: "/etc/suricata/suricata.yaml"
-    validate_command: "suricata -T -c /etc/suricata/suricata.yaml"
-    apply_command: "suricatasc -c reload-rules"
-    notes:
-      - "Use thresholding/suppression for repetitive benign traffic patterns."
-      - "Keep SIDs/revisions stable to preserve alert history quality."
-
-  wazuh:
-    output_file: "/var/ossec/etc/rules/local_rules.xml"
-    local_decoder_file: "/var/ossec/etc/decoders/local_decoder.xml"
-    validate_command: "/var/ossec/bin/wazuh-logtest"
-    apply_command: "systemctl restart wazuh-manager"
-    notes:
-      - "Use local custom files to avoid upgrade overwrite."
-      - "Correlate with if_sid/if_group before adding new broad rules."
-
-  zeek:
-    output_file: "/usr/local/zeek/share/zeek/site/bannin.zeek"
-    site_entrypoint: "/usr/local/zeek/share/zeek/site/local.zeek"
-    validate_command: "zeek -N && zeek -b -s local"
-    apply_command: "zeekctl deploy"
-    notes:
-      - "Prefer script-based logic and Notice framework for context-rich detections."
-      - "Use notice suppression windows for known recurring benign events."
+      - "Keep custom rules in a dedicated file under /etc/audit/rules.d."
+      - "Use stable -k keys so operators can search the resulting log stream."

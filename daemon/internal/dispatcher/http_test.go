@@ -51,7 +51,7 @@ func TestSendAlertsSuccess(t *testing.T) {
 	})
 
 	alert := models.SecEvent{
-		SourceTool:  models.FALCO,
+		SourceTool:  models.AUDITD,
 		Priority:    "Critical",
 		Description: "shell spawned",
 		RawPayload:  json.RawMessage(`{"rule":"terminal"}`),
@@ -61,7 +61,7 @@ func TestSendAlertsSuccess(t *testing.T) {
 		t.Fatalf("SendAlerts: %v", err)
 	}
 
-	if got.SourceTool != models.FALCO || got.Priority != "Critical" || got.Description != "shell spawned" {
+	if got.SourceTool != models.AUDITD || got.Priority != "Critical" || got.Description != "shell spawned" {
 		t.Fatalf("unexpected payload: %#v", got)
 	}
 	if got.Timestamp.IsZero() {
@@ -71,13 +71,13 @@ func TestSendAlertsSuccess(t *testing.T) {
 
 func TestSendRuleReturnsBackendError(t *testing.T) {
 	client := newTestClient(t, func(req *http.Request) (*http.Response, error) {
-		if req.URL.Query().Get("toolname") != "falco" {
+		if req.URL.Query().Get("toolname") != "auditd" {
 			t.Fatalf("unexpected query: %s", req.URL.RawQuery)
 		}
 		return response(http.StatusBadRequest, "bad rule"), nil
 	})
 
-	err := client.SendRule("falco", "rule text")
+	err := client.SendRule("auditd", "rule text")
 	if err == nil || !strings.Contains(err.Error(), "status 400") {
 		t.Fatalf("expected backend error, got %v", err)
 	}

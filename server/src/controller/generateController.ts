@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { toolname } from "../../generated/prisma/enums.js";
+import { TOOL_NAMES, type toolname } from "../domain/toolname.js";
 import { runProjectSummariserAgent } from "../agents/project-summariser.js";
 import { getSingleQueryValue } from "../http/requestParsers.js";
 import { createLogger } from "../utils/logger.js";
@@ -9,7 +9,7 @@ const logger = createLogger("generate.controller");
 
 const isValidToolName = (value: unknown): value is toolname =>
   typeof value === "string" &&
-  Object.values(toolname).includes(value as toolname);
+  TOOL_NAMES.includes(value as toolname);
 
 export const generateRules = async (req: Request, res: Response) => {
   try {

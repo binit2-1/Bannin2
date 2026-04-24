@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { toolname } from "../../generated/prisma/enums.js";
+import type { toolname } from "../domain/toolname.js";
 
 export type RuleToolConfig = {
   outputFile: string;
@@ -40,14 +40,11 @@ const extractQuotedValue = (block: string, key: string): string => {
 export const loadRuleWritingGuidance = async (
   selectedTool: toolname,
 ): Promise<RuleWritingGuidance> => {
-  const filesToLoad = [
-    path.join(skillDir, "SKILL.md"),
-    banninConfigPath,
-    path.join(skillDir, `${selectedTool}.md`),
-  ];
-  const [skillOverview, rawConfig, toolGuide] = await Promise.all(
-    filesToLoad.map((file) => readFile(file, "utf-8")),
-  );
+  const [skillOverview, rawConfig, toolGuide] = await Promise.all([
+    readFile(path.join(skillDir, "SKILL.md"), "utf-8"),
+    readFile(banninConfigPath, "utf-8"),
+    readFile(path.join(skillDir, `${selectedTool}.md`), "utf-8"),
+  ]);
 
   const rawToolBlock = extractToolBlock(rawConfig, selectedTool);
   const toolConfig: RuleToolConfig = {
